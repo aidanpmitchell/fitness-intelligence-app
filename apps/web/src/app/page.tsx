@@ -22,6 +22,8 @@ export default function HomePage() {
   const [calories, setCalories] = useState('')
 
   const fetchLogs = async () => {
+    setLoading(true)
+
     const { data } = await supabase
       .from('daily_logs')
       .select('*')
@@ -32,34 +34,48 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    fetchLogs()
+    const loadLogs = async () => {
+      await fetchLogs()
+    }
+
+    void loadLogs()
   }, [])
 
+  const latestWeightLog = logs.find((log) => log.body_weight !== null)
+  const latestWeight = latestWeightLog?.body_weight ?? null
+
+  const logsWithCalories = logs.filter((log) => log.calories !== null)
+  const averageCalories =
+    logsWithCalories.length > 0
+      ? logsWithCalories.reduce((sum, log) => sum + (log.calories ?? 0), 0) /
+        logsWithCalories.length
+      : null
+
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault()
+    e.preventDefault()
 
-  const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().split('T')[0]
 
-  const { data, error } = await supabase.from('daily_logs').insert([
-    {
-      log_date: today,
-      body_weight: weight ? Number(weight) : null,
-      calories: calories ? Number(calories) : null
+    const { data, error } = await supabase.from('daily_logs').insert([
+      {
+        log_date: today,
+        body_weight: weight ? Number(weight) : null,
+        calories: calories ? Number(calories) : null
+      }
+    ])
+
+    if (error) {
+      console.error('Insert error:', error)
+      alert(`Insert error: ${error.message}`)
+      return
     }
-  ])
 
-  if (error) {
-    console.error('Insert error:', error)
-    alert(`Insert error: ${error.message}`)
-    return
+    console.log('Insert success:', data)
+
+    setWeight('')
+    setCalories('')
+    fetchLogs()
   }
-
-  console.log('Insert success:', data)
-
-  setWeight('')
-  setCalories('')
-  fetchLogs()
-}
 
   return (
     <main className="min-h-screen p-8 space-y-6">
@@ -97,8 +113,29 @@ export default function HomePage() {
       {loading ? (
         <p>Loading logs...</p>
       ) : (
-        <div>
+        <div className="space-y-6">
           <p className="text-lg mb-4">Found {logs.length} daily log(s).</p>
+
+          <section className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-gray-600">Latest weight</p>
+              <p className="text-2xl font-semibold">
+                {latestWeight !== null ? latestWeight : '—'}
+              </p>
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-gray-600">Average calories</p>
+              <p className="text-2xl font-semibold">
+                {averageCalories !== null ? Math.round(averageCalories) : '—'}
+              </p>
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-gray-600">Total logs</p>
+              <p className="text-2xl font-semibold">{logs.length}</p>
+            </div>
+          </section>
 
           {logs.length === 0 ? (
             <p>No logs yet.</p>
