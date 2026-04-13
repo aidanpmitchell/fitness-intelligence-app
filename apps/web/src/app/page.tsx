@@ -28,6 +28,7 @@ export default function HomePage() {
       .from('daily_logs')
       .select('*')
       .order('log_date', { ascending: false })
+      .order('created_at', { ascending: false })
 
     setLogs(data ?? [])
     setLoading(false)
@@ -43,6 +44,16 @@ export default function HomePage() {
 
   const latestWeightLog = logs.find((log) => log.body_weight !== null)
   const latestWeight = latestWeightLog?.body_weight ?? null
+
+  const recentWeights = logs
+    .filter((log) => log.body_weight !== null)
+    .slice(0, 3)
+
+  const trendWeight =
+    recentWeights.length > 0
+      ? recentWeights.reduce((sum, log) => sum + (log.body_weight ?? 0), 0) /
+        recentWeights.length
+      : null
 
   const logsWithCalories = logs.filter((log) => log.calories !== null)
   const averageCalories =
@@ -116,7 +127,7 @@ export default function HomePage() {
         <div className="space-y-6">
           <p className="text-lg mb-4">Found {logs.length} daily log(s).</p>
 
-          <section className="grid gap-4 md:grid-cols-3">
+          <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border p-4">
               <p className="text-sm text-gray-600">Latest weight</p>
               <p className="text-2xl font-semibold">
@@ -128,6 +139,13 @@ export default function HomePage() {
               <p className="text-sm text-gray-600">Average calories</p>
               <p className="text-2xl font-semibold">
                 {averageCalories !== null ? Math.round(averageCalories) : '—'}
+              </p>
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-gray-600">Trend Weight</p>
+              <p className="text-2xl font-semibold">
+                {trendWeight !== null ? trendWeight.toFixed(1) : '—'}
               </p>
             </div>
 
