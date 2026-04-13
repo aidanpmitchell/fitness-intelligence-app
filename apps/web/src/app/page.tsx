@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 type DailyLog = {
   id: string
   log_date: string
+  created_at: string
   body_weight: number | null
   calories: number | null
   protein_g: number | null
@@ -45,14 +46,68 @@ export default function HomePage() {
   const latestWeightLog = logs.find((log) => log.body_weight !== null)
   const latestWeight = latestWeightLog?.body_weight ?? null
 
-  const recentWeights = logs
-    .filter((log) => log.body_weight !== null)
-    .slice(0, 3)
+  const dailyWeightMap = new Map<string, DailyLog>()
+  const weightLogs = logs.filter((log) => log.body_weight !== null)
 
-  const trendWeight =
-    recentWeights.length > 0
-      ? recentWeights.reduce((sum, log) => sum + (log.body_weight ?? 0), 0) /
-        recentWeights.length
+  for (const log of weightLogs) {
+    if (!dailyWeightMap.has(log.log_date)) {
+      dailyWeightMap.set(log.log_date, log)
+    }
+  }
+
+  const dailyWeightEntries = Array.from(dailyWeightMap.values()).sort((a, b) =>
+    a.log_date.localeCompare(b.log_date)
+  )
+
+  const trendSeries = dailyWeightEntries.map((entry, index) => {
+    const windowStart = Math.max(0, index - 2)
+    const window = dailyWeightEntries.slice(windowStart, index + 1)
+    const averageWeight =
+      window.reduce((sum, log) => sum + (log.body_weight ?? 0), 0) / window.length
+
+    return {
+      date: entry.log_date,
+      weight: averageWeight,
+      pointCount: window.length
+    }
+  })
+
+  const latestTrendPoint = trendSeries.at(-1)
+  const trendWeight = latestTrendPoint?.weight ?? null
+
+  const latestTrendDate = latestTrendPoint
+    ? new Date(`${latestTrendPoint.date}T00:00:00`)
+    : null
+
+  const previousTrendPoint =
+    latestTrendDate === null
+      ? null
+      : [...trendSeries]
+          .reverse()
+          .find((point) => {
+            const pointDate = new Date(`${point.date}T00:00:00`)
+            const daysBetween =
+              (latestTrendDate.getTime() - pointDate.getTime()) / (1000 * 60 * 60 * 24)
+
+            return daysBetween >= 5
+          }) ?? null
+
+  const weeklyChange =
+    latestTrendPoint !== undefined &&
+    previousTrendPoint !== null &&
+    latestTrendPoint.pointCount >= 2 &&
+    previousTrendPoint.pointCount >= 2 &&
+    latestTrendDate !== null
+      ? (() => {
+          const previousTrendDate = new Date(`${previousTrendPoint.date}T00:00:00`)
+          const daysBetween =
+            (latestTrendDate.getTime() - previousTrendDate.getTime()) /
+            (1000 * 60 * 60 * 24)
+
+          return daysBetween > 0
+            ? ((latestTrendPoint.weight - previousTrendPoint.weight) / daysBetween) * 7
+            : null
+        })()
       : null
 
   const logsWithCalories = logs.filter((log) => log.calories !== null)
@@ -127,7 +182,7 @@ export default function HomePage() {
         <div className="space-y-6">
           <p className="text-lg mb-4">Found {logs.length} daily log(s).</p>
 
-          <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-lg border p-4">
               <p className="text-sm text-gray-600">Latest weight</p>
               <p className="text-2xl font-semibold">
@@ -146,6 +201,15 @@ export default function HomePage() {
               <p className="text-sm text-gray-600">Trend Weight</p>
               <p className="text-2xl font-semibold">
                 {trendWeight !== null ? trendWeight.toFixed(1) : '—'}
+              </p>
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-gray-600">Weekly Change</p>
+              <p className="text-2xl font-semibold">
+                {weeklyChange !== null
+                  ? `${weeklyChange >= 0 ? '+' : ''}${weeklyChange.toFixed(2)} lb/week`
+                  : '—'}
               </p>
             </div>
 
