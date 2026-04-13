@@ -1,19 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-
-type DailyLog = {
-  id: string
-  log_date: string
-  created_at: string
-  body_weight: number | null
-  calories: number | null
-  protein_g: number | null
-  carbs_g: number | null
-  fat_g: number | null
-  notes: string | null
-}
+import { type DailyLog, getWeightMetrics } from '@/lib/weight-metrics'
 
 export default function HomePage() {
   const [logs, setLogs] = useState<DailyLog[]>([])
@@ -23,8 +13,6 @@ export default function HomePage() {
   const [calories, setCalories] = useState('')
 
   const fetchLogs = async () => {
-    setLoading(true)
-
     const { data } = await supabase
       .from('daily_logs')
       .select('*')
@@ -32,83 +20,32 @@ export default function HomePage() {
       .order('created_at', { ascending: false })
 
     setLogs(data ?? [])
+  }
+
+  const loadLogs = async () => {
+    setLoading(true)
+    await fetchLogs()
     setLoading(false)
   }
 
   useEffect(() => {
-    const loadLogs = async () => {
-      await fetchLogs()
+    const fetchInitialLogs = async () => {
+      setLoading(true)
+
+      const { data: logsData } = await supabase
+        .from('daily_logs')
+        .select('*')
+        .order('log_date', { ascending: false })
+        .order('created_at', { ascending: false })
+
+      setLogs(logsData ?? [])
+      setLoading(false)
     }
 
-    void loadLogs()
+    void fetchInitialLogs()
   }, [])
 
-  const latestWeightLog = logs.find((log) => log.body_weight !== null)
-  const latestWeight = latestWeightLog?.body_weight ?? null
-
-  const dailyWeightMap = new Map<string, DailyLog>()
-  const weightLogs = logs.filter((log) => log.body_weight !== null)
-
-  for (const log of weightLogs) {
-    if (!dailyWeightMap.has(log.log_date)) {
-      dailyWeightMap.set(log.log_date, log)
-    }
-  }
-
-  const dailyWeightEntries = Array.from(dailyWeightMap.values()).sort((a, b) =>
-    a.log_date.localeCompare(b.log_date)
-  )
-
-  const trendSeries = dailyWeightEntries.map((entry, index) => {
-    const windowStart = Math.max(0, index - 2)
-    const window = dailyWeightEntries.slice(windowStart, index + 1)
-    const averageWeight =
-      window.reduce((sum, log) => sum + (log.body_weight ?? 0), 0) / window.length
-
-    return {
-      date: entry.log_date,
-      weight: averageWeight,
-      pointCount: window.length
-    }
-  })
-
-  const latestTrendPoint = trendSeries.at(-1)
-  const trendWeight = latestTrendPoint?.weight ?? null
-
-  const latestTrendDate = latestTrendPoint
-    ? new Date(`${latestTrendPoint.date}T00:00:00`)
-    : null
-
-  const previousTrendPoint =
-    latestTrendDate === null
-      ? null
-      : [...trendSeries]
-          .reverse()
-          .find((point) => {
-            const pointDate = new Date(`${point.date}T00:00:00`)
-            const daysBetween =
-              (latestTrendDate.getTime() - pointDate.getTime()) / (1000 * 60 * 60 * 24)
-
-            return daysBetween >= 5
-          }) ?? null
-
-  const weeklyChange =
-    latestTrendPoint !== undefined &&
-    previousTrendPoint !== null &&
-    latestTrendPoint.pointCount >= 2 &&
-    previousTrendPoint.pointCount >= 2 &&
-    latestTrendDate !== null
-      ? (() => {
-          const previousTrendDate = new Date(`${previousTrendPoint.date}T00:00:00`)
-          const daysBetween =
-            (latestTrendDate.getTime() - previousTrendDate.getTime()) /
-            (1000 * 60 * 60 * 24)
-
-          return daysBetween > 0
-            ? ((latestTrendPoint.weight - previousTrendPoint.weight) / daysBetween) * 7
-            : null
-        })()
-      : null
+  const { latestWeight, trendWeight, weeklyChange } = getWeightMetrics(logs)
 
   const logsWithCalories = logs.filter((log) => log.calories !== null)
   const averageCalories =
@@ -140,12 +77,17 @@ export default function HomePage() {
 
     setWeight('')
     setCalories('')
-    fetchLogs()
+    loadLogs()
   }
 
   return (
     <main className="min-h-screen p-8 space-y-6">
-      <h1 className="text-3xl font-bold">Fitness Intelligence App</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold">Fitness Intelligence App</h1>
+        <Link href="/goals" className="text-blue-600 hover:underline">
+          Goals
+        </Link>
+      </div>
 
       {/* FORM */}
       <form onSubmit={handleSubmit} className="space-y-4 border p-4 rounded-lg">
